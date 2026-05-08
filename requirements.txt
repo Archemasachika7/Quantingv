@@ -30,7 +30,8 @@ torch==2.4.1
 # Scheduler
 apscheduler==3.10.4
 
-# Database
+# Database — Supabase (PostgreSQL) + SQLite fallback
+supabase==2.10.0
 sqlalchemy==2.0.36
 aiosqlite==0.20.0
 

@@ -1,92 +1,117 @@
-# QuantingV Setup Guide
+# QuantingV — Setup & Deployment Guide
 
-## Prerequisites
-- Python 3.11+
-- Node.js 18+
+## API Keys You Need
 
-## 1. Backend Setup
+| Key | Where to get it | Free? | Used for |
+|---|---|---|---|
+| `GEMINI_API_KEY` | [aistudio.google.com](https://aistudio.google.com) → Get API key | Yes (1500 req/day) | AI explanations, weekly outlook, strategy critique |
+| `NEWS_API_KEY` | [newsapi.org/register](https://newsapi.org/register) | Yes (100 req/day) | News sentiment per asset |
+| `SUPABASE_URL` | Supabase → Project Settings → API → Project URL | Yes | Database + auth |
+| `SUPABASE_ANON_KEY` | Supabase → Settings → API → `anon public` | Yes | Frontend auth |
+| `SUPABASE_SERVICE_KEY` | Supabase → Settings → API → `service_role secret` | Yes | Backend DB writes |
+| `DATABASE_URL` | Supabase → Settings → Database → Connection string (URI) | Yes | PostgreSQL connection |
+| `VITE_API_URL` | Your Railway backend URL (set in Vercel dashboard) | — | Frontend → backend routing |
+
+> **App works without any keys** — falls back to SQLite, mock news, keyword sentiment, and static AI responses.
+
+---
+
+## Supabase Setup (First Time)
+
+1. Go to [supabase.com](https://supabase.com) → New Project
+2. Choose a name, password (save it — needed for `DATABASE_URL`), and region (closest to you)
+3. Wait ~2 min for project to spin up
+4. Go to **SQL Editor** → **New Query**
+5. Paste the entire contents of `supabase/schema.sql` and click **Run**
+6. Go to **Settings → API** and copy your keys into `.env`
+
+---
+
+## Local Development
 
 ```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate      # Windows: .venv\Scripts\activate
-pip install -r ../requirements.txt
-```
+# 1. Clone and install Python deps
+git clone https://github.com/Archemasachika7/Quantingv
+cd Quantingv
+pip install -r requirements.txt
 
-## 2. Environment Variables
-
-Copy and fill in `.env.example` → `.env`:
-```bash
+# 2. Set up environment
 cp .env.example .env
-```
+# Edit .env with your keys
 
-Required for full functionality:
-| Variable | Source | Free? |
-|---|---|---|
-| `GEMINI_API_KEY` | [Google AI Studio](https://aistudio.google.com) | Yes (free tier) |
-| `NEWS_API_KEY` | [newsapi.org](https://newsapi.org) | Yes (free tier) |
-| `GOLDAPI_KEY` | [goldapi.io](https://goldapi.io) | Optional |
-
-> **Without API keys:** The app works with mock data and keyword-based sentiment. Add keys to unlock Gemini AI explanations and real news.
-
-## 3. Seed Historical Data (First Run Only)
-
-```bash
-# From repo root — pulls 60 months of data for all assets
-python scripts/fetch_historical.py
-
-# Or just prediction assets (faster):
+# 3. Seed historical data (first run only — takes ~2 min)
 python scripts/fetch_historical.py --prediction-only
 
-# Or specific symbols:
-python scripts/fetch_historical.py --symbols GOLD NIFTY50 BTC --months 36
-```
-
-## 4. Start Backend
-
-```bash
+# 4. Start backend
 cd backend
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-```
 
-API docs: http://localhost:8000/docs
-
-## 5. Start Frontend
-
-```bash
+# 5. Start frontend (new terminal)
 cd frontend
 npm install
 npm run dev
+# → http://localhost:5173
 ```
 
-Open: http://localhost:5173
+---
 
-## 6. Quick Start (Both Together)
+## Production Deployment
 
-```bash
-chmod +x start.sh
-./start.sh
+### Backend → Railway
+
+1. Go to [railway.app](https://railway.app) → New Project → Deploy from GitHub
+2. Select the `Quantingv` repo
+3. Railway auto-detects `railway.json` and builds with Nixpacks
+4. Go to **Variables** and add all backend env vars:
+   ```
+   GEMINI_API_KEY=...
+   NEWS_API_KEY=...
+   SUPABASE_URL=...
+   SUPABASE_SERVICE_KEY=...
+   DATABASE_URL=...
+   CORS_ORIGINS=https://your-app.vercel.app
+   ```
+5. Railway gives you a URL like `https://quantingv-production.up.railway.app` — copy it
+
+### Frontend → Vercel
+
+1. Go to [vercel.com](https://vercel.com) → New Project → Import from GitHub
+2. Select `Quantingv` repo
+3. Set **Root Directory** to `frontend`
+4. Add environment variable:
+   ```
+   VITE_API_URL = https://quantingv-production.up.railway.app
+   ```
+5. Deploy — Vercel auto-detects Vite, builds, and gives you `https://quantingv.vercel.app`
+
+### Final step: update CORS
+
+Back in Railway, update `CORS_ORIGINS` to include your Vercel URL:
+```
+CORS_ORIGINS=https://quantingv.vercel.app,http://localhost:5173
 ```
 
 ---
 
 ## API Reference
 
-| Endpoint | Description |
-|---|---|
-| `GET /api/quotes` | All live quotes |
-| `GET /api/chart/{symbol}?period=6mo` | Candle data for chart |
-| `GET /api/predict/{symbol}` | ML + AI prediction |
-| `GET /api/predictions` | All cached predictions |
-| `GET /api/sentiment/{symbol}` | News sentiment |
-| `GET /api/weekly-outlook` | AI weekly report |
-| `POST /api/backtest` | Run strategy backtest |
-| `GET /api/strategies` | List built-in strategies |
-| `WS /ws/quotes` | Live quote WebSocket |
+| Endpoint | Method | Description |
+|---|---|---|
+| `/health` | GET | Health check |
+| `/api/quotes` | GET | All live quotes |
+| `/api/quotes/{symbol}` | GET | Single asset quote |
+| `/api/chart/{symbol}?period=6mo` | GET | Candle data for chart |
+| `/api/predict/{symbol}?fresh=false` | GET | ML + AI prediction (7-day) |
+| `/api/predictions` | GET | All cached predictions |
+| `/api/sentiment/{symbol}` | GET | News sentiment |
+| `/api/weekly-outlook` | GET | AI weekly report |
+| `/api/backtest` | POST | Run strategy backtest |
+| `/api/strategies` | GET | List built-in strategies |
+| `/api/strategy/critique` | POST | AI strategy evaluation |
+| `/ws/quotes` | WS | Live quote WebSocket (15s) |
 
-## Backtesting
+## Backtest Request Format
 
-POST `/api/backtest`:
 ```json
 {
   "strategy_name": "rsi_reversal",
@@ -97,26 +122,24 @@ POST `/api/backtest`:
 }
 ```
 
-Custom strategy format:
+Custom strategy (Python):
 ```python
 def strategy(row, portfolio, history, symbol):
-    # row: dict with all OHLCV + indicators
-    # portfolio.buy(symbol, qty, price)
-    # portfolio.sell(symbol, qty, price)
     rsi = row.get('rsi')
-    if rsi and rsi < 30 and symbol not in portfolio.positions:
+    if rsi is None:
+        return
+    if rsi < 30 and symbol not in portfolio.positions:
         qty = portfolio.cash * 0.95 / row['close']
         portfolio.buy(symbol, qty=qty, price=row['close'])
+    elif rsi > 70 and symbol in portfolio.positions:
+        portfolio.sell(symbol, qty=portfolio.positions[symbol].qty, price=row['close'])
 ```
 
-## Built-in Strategies
-- `sma_crossover` — SMA 20/50 crossover
-- `rsi_reversal` — RSI oversold/overbought
-- `macd_momentum` — MACD signal crossover
-- `bollinger_bands` — Bollinger Band reversion
-
 ## Phase Roadmap
-- **Phase 1 (Current):** Live dashboard, candlestick charts with trade markers, paper trading, backtesting, ML forecasts, Gemini AI explanations
-- **Phase 2:** LSTM models, market replay engine, FinBERT sentiment
-- **Phase 3:** Reinforcement learning agents, portfolio optimization
-- **Phase 4:** Strategy marketplace, multi-agent simulation
+
+| Phase | Status | Features |
+|---|---|---|
+| **1 — MVP** | ✅ Built | Live dashboard, candle charts, trade markers, paper trading, backtesting, ML forecasts, Gemini AI, Supabase |
+| **2 — AI** | Planned | LSTM models, FinBERT sentiment, market replay engine |
+| **3 — Advanced** | Planned | RL agents, portfolio optimizer, multi-strategy |
+| **4 — Platform** | Planned | Strategy marketplace, multi-agent simulation, AI trade journal |
