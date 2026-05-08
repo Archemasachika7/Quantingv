@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 
-const BASE = ''  // proxied via Vite
+// In production (Vercel), set VITE_API_URL to your Railway backend URL.
+// In local dev, Vite proxies /api and /ws to localhost:8000.
+const API_BASE = import.meta.env.VITE_API_URL || ''
 
 export function useApi(path, options = {}) {
   const [data, setData] = useState(null)
@@ -11,7 +13,7 @@ export function useApi(path, options = {}) {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api${path}`, options)
+      const res = await fetch(`${API_BASE}/api${path}`, options)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setData(await res.json())
     } catch (e) {
@@ -27,7 +29,7 @@ export function useApi(path, options = {}) {
 }
 
 export async function apiPost(path, body) {
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(`${API_BASE}/api${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -41,13 +43,20 @@ export async function apiPost(path, body) {
 
 export function useWebSocket(path, onMessage) {
   useEffect(() => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const url = `${protocol}//${window.location.host}${path}`
+    // Derive WS URL from API_BASE or fall back to same-host proxy
+    let wsUrl
+    if (API_BASE) {
+      wsUrl = API_BASE.replace(/^https?/, (p) => p === 'https' ? 'wss' : 'ws') + path
+    } else {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+      wsUrl = `${protocol}//${window.location.host}${path}`
+    }
+
     let ws
     let closed = false
 
     const connect = () => {
-      ws = new WebSocket(url)
+      ws = new WebSocket(wsUrl)
       ws.onmessage = (e) => onMessage(JSON.parse(e.data))
       ws.onclose = () => { if (!closed) setTimeout(connect, 3000) }
     }

@@ -6,6 +6,12 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any
 
+import sys
+from pathlib import Path
+
+# Make `backend/` importable whether running from repo root or from within backend/
+sys.path.insert(0, str(Path(__file__).parent))
+
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
