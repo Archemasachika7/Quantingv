@@ -10,7 +10,7 @@ httpx==0.27.2
 # Data
 yfinance==0.2.50
 pandas==2.2.3
-numpy==1.26.4
+numpy>=1.26.4,<2.0
 requests==2.32.3
 
 # Technical Indicators
@@ -22,15 +22,10 @@ xgboost==2.1.2
 statsmodels==0.14.4
 prophet==1.1.6
 
-# Sentiment
-transformers==4.46.3
-torch==2.4.1
---extra-index-url https://download.pytorch.org/whl/cpu
-
 # Scheduler
 apscheduler==3.10.4
 
-# Database — Supabase (PostgreSQL) + SQLite fallback
+# Database — Supabase + SQLite fallback
 supabase==2.10.0
 sqlalchemy==2.0.36
 aiosqlite==0.20.0
