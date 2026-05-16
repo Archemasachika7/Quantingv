@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: quantingv-backend
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: NEWS_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
