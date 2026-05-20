@@ -150,7 +150,11 @@ export default function StrategyHouse({ onMarkersUpdate }) {
           </div>
         )}
 
-        <button onClick={run} disabled={running} className="btn-primary flex items-center gap-2 w-full justify-center">
+        <button
+          onClick={run}
+          disabled={running}
+          className={`btn-primary flex items-center gap-2 w-full justify-center ${!running && !result ? 'btn-pulse' : ''}`}
+        >
           <Play size={12} />
           {running ? 'Running backtest...' : 'Run Backtest'}
         </button>
@@ -173,20 +177,27 @@ export default function StrategyHouse({ onMarkersUpdate }) {
             {/* Key metrics grid */}
             <div className="grid grid-cols-3 gap-2">
               {[
-                { label: 'Total Return', value: `${m.total_return_pct > 0 ? '+' : ''}${m.total_return_pct}%`, color: m.total_return_pct > 0 ? 'price-up' : 'price-down' },
-                { label: 'CAGR', value: `${m.cagr_pct > 0 ? '+' : ''}${m.cagr_pct}%`, color: m.cagr_pct > 0 ? 'price-up' : 'price-down' },
-                { label: 'Sharpe', value: m.sharpe_ratio, color: m.sharpe_ratio > 1 ? 'price-up' : m.sharpe_ratio > 0 ? 'text-terminal-yellow' : 'price-down' },
-                { label: 'Max DD', value: `-${m.max_drawdown_pct}%`, color: 'price-down' },
-                { label: 'Win Rate', value: `${m.win_rate_pct}%`, color: m.win_rate_pct > 50 ? 'price-up' : 'price-down' },
-                { label: 'Trades', value: m.num_trades, color: 'text-terminal-dim' },
-                { label: 'Profit Factor', value: m.profit_factor, color: m.profit_factor > 1.5 ? 'price-up' : 'text-terminal-yellow' },
-                { label: 'Final Equity', value: `₹${m.final_equity?.toLocaleString('en-IN')}`, color: 'text-terminal-text' },
-                { label: 'Sortino', value: m.sortino_ratio, color: m.sortino_ratio > 1 ? 'price-up' : 'text-terminal-dim' },
+                { label: 'Total Return', value: `${m.total_return_pct > 0 ? '+' : ''}${m.total_return_pct}%`, color: m.total_return_pct > 0 ? 'price-up' : 'price-down', positive: m.total_return_pct > 0 },
+                { label: 'CAGR', value: `${m.cagr_pct > 0 ? '+' : ''}${m.cagr_pct}%`, color: m.cagr_pct > 0 ? 'price-up' : 'price-down', positive: m.cagr_pct > 0 },
+                { label: 'Sharpe', value: m.sharpe_ratio, color: m.sharpe_ratio > 1 ? 'price-up' : m.sharpe_ratio > 0 ? 'text-terminal-yellow' : 'price-down', positive: m.sharpe_ratio > 1 },
+                { label: 'Max DD', value: `-${m.max_drawdown_pct}%`, color: 'price-down', positive: false },
+                { label: 'Win Rate', value: `${m.win_rate_pct}%`, color: m.win_rate_pct > 50 ? 'price-up' : 'price-down', positive: m.win_rate_pct > 50 },
+                { label: 'Trades', value: m.num_trades, color: 'text-terminal-dim', positive: null },
+                { label: 'Profit Factor', value: m.profit_factor, color: m.profit_factor > 1.5 ? 'price-up' : 'text-terminal-yellow', positive: m.profit_factor > 1.5 },
+                { label: 'Final Equity', value: `₹${m.final_equity?.toLocaleString('en-IN')}`, color: 'text-terminal-text', positive: null },
+                { label: 'Sortino', value: m.sortino_ratio, color: m.sortino_ratio > 1 ? 'price-up' : 'text-terminal-dim', positive: m.sortino_ratio > 1 },
               ].map((item, i) => (
                 <div
                   key={item.label}
                   className="metric-card animate-fadeInUp"
-                  style={{ animationDelay: `${i * 0.05}s` }}
+                  style={{
+                    animationDelay: `${i * 0.05}s`,
+                    borderColor: item.positive === true
+                      ? 'rgba(38,166,154,0.25)'
+                      : item.positive === false
+                        ? 'rgba(239,83,80,0.25)'
+                        : undefined,
+                  }}
                 >
                   <div className="terminal-label">{item.label}</div>
                   <div className={`text-sm font-bold ${item.color}`}>{item.value}</div>
