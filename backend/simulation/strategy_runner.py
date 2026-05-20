@@ -70,7 +70,13 @@ BUILT_IN_STRATEGIES = {
     """),
 }
 
-ALLOWED_BUILTINS = {"abs", "round", "min", "max", "len", "range", "sum", "print", "int", "float", "bool", "str", "list", "dict"}
+ALLOWED_BUILTINS = {
+    "abs", "round", "min", "max", "len", "range", "sum", "print",
+    "int", "float", "bool", "str", "list", "dict", "tuple", "set",
+    "all", "any", "zip", "enumerate", "sorted", "reversed", "map",
+    "filter", "isinstance", "hasattr", "getattr", "type", "None",
+    "True", "False",
+}
 
 
 def run_strategy(
