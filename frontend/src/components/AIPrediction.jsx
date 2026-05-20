@@ -23,9 +23,10 @@ export default function AIPrediction({ symbol }) {
     setLoading(true)
     setError(null)
     fetch(`${API_BASE}/api/predict/${symbol}${fresh ? '?fresh=true' : ''}`)
-      .then(r => r.json())
-      .then(d => {
-        if (d.error) throw new Error(d.error)
+      .then(r => r.json().then(d => ({ ok: r.ok, d })))
+      .then(({ ok, d }) => {
+        if (!ok) throw new Error(d.detail || d.error || 'Forecast failed')
+        if (d.error || d.detail) throw new Error(d.error || d.detail)
         setPrediction(d)
       })
       .catch(e => setError(e.message))
@@ -37,7 +38,7 @@ export default function AIPrediction({ symbol }) {
   const p = prediction
   const DirectionIcon = p ? (DIRECTION_ICONS[p.direction] || Minus) : Minus
   const dirColor = p ? (DIRECTION_COLORS[p.direction] || 'text-terminal-dim') : 'text-terminal-dim'
-  const confPct = p ? Math.round(p.confidence * 100) : 0
+  const confPct = p ? Math.round((p.confidence || 0) * 100) : 0
 
   return (
     <div className="terminal-card flex flex-col h-full">
