@@ -23,13 +23,19 @@ def optimize_portfolio(symbols: list[str], months: int = 12) -> dict:
         price_series: dict[str, pd.Series] = {}
         failed: list[str] = []
 
+        import time
         for sym in symbols:
             try:
                 df = fetch_historical(sym, months=months)
                 if df.empty or "close" not in df.columns or len(df) < 20:
+                    # Retry once after a short pause
+                    time.sleep(1.5)
+                    df = fetch_historical(sym, months=months)
+                if df.empty or "close" not in df.columns or len(df) < 20:
                     failed.append(sym)
                     continue
                 price_series[sym] = df["close"].dropna()
+                time.sleep(0.4)  # avoid Yahoo Finance rate-limit
             except Exception:
                 failed.append(sym)
 
