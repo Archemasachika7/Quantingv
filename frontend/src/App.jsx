@@ -5,10 +5,13 @@ import CandleChart from './components/CandleChart'
 import AIPrediction from './components/AIPrediction'
 import StrategyHouse from './components/StrategyHouse'
 import WeeklyOutlook from './components/WeeklyOutlook'
+import StressTest from './components/StressTest'
+import PortfolioOptimizer from './components/PortfolioOptimizer'
+import AlertsPanel from './components/AlertsPanel'
 import { Activity } from 'lucide-react'
 import { API_BASE } from './hooks/useApi'
 
-const TABS = ['Dashboard', 'Strategy House', 'Weekly Outlook']
+const TABS = ['Dashboard', 'Strategy House', 'Weekly Outlook', 'Risk Lab', 'Portfolio', 'Alerts']
 
 function getISTNow() {
   const now = new Date()
@@ -169,6 +172,24 @@ export default function App() {
         {tab === 'Weekly Outlook' && (
           <div className="max-w-2xl">
             <WeeklyOutlook />
+          </div>
+        )}
+
+        {tab === 'Risk Lab' && (
+          <div className="max-w-5xl">
+            <StressTest />
+          </div>
+        )}
+
+        {tab === 'Portfolio' && (
+          <div className="max-w-5xl">
+            <PortfolioOptimizer />
+          </div>
+        )}
+
+        {tab === 'Alerts' && (
+          <div className="max-w-3xl">
+            <AlertsPanel />
           </div>
         )}
       </main>
