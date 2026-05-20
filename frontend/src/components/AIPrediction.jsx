@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { TrendingUp, TrendingDown, Minus, RefreshCw, Brain } from 'lucide-react'
 import { API_BASE } from '../hooks/useApi'
 
@@ -12,6 +12,62 @@ const DIRECTION_ICONS = {
   Bullish: TrendingUp,
   Bearish: TrendingDown,
   Neutral: Minus,
+}
+
+function AnimatedConfidenceBar({ confPct, direction }) {
+  const [width, setWidth] = useState(0)
+
+  useEffect(() => {
+    // Start at 0, animate to target
+    setWidth(0)
+    const timer = setTimeout(() => setWidth(confPct), 80)
+    return () => clearTimeout(timer)
+  }, [confPct, direction])
+
+  const barColor =
+    direction === 'Bullish' ? 'bg-terminal-green' :
+    direction === 'Bearish' ? 'bg-terminal-red' :
+    'bg-terminal-yellow'
+
+  return (
+    <div className="w-full bg-terminal-muted rounded-full h-1.5 overflow-hidden">
+      <div
+        className={`h-1.5 rounded-full ${barColor}`}
+        style={{
+          width: `${width}%`,
+          transition: 'width 0.8s cubic-bezier(0.4, 0, 0.2, 1)',
+        }}
+      />
+    </div>
+  )
+}
+
+function LoadingDots() {
+  const [dots, setDots] = useState('')
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setDots(d => d.length >= 3 ? '' : d + '.')
+    }, 400)
+    return () => clearInterval(interval)
+  }, [])
+  return <span>Computing forecast{dots}</span>
+}
+
+function DirectionBadge({ direction }) {
+  if (!direction) return null
+  const cls =
+    direction === 'Bullish' ? 'badge-bullish' :
+    direction === 'Bearish' ? 'badge-bearish' :
+    'badge-neutral'
+  const Icon = DIRECTION_ICONS[direction] || Minus
+  return (
+    <span className={cls}>
+      <span className="inline-flex items-center gap-1">
+        <Icon size={10} />
+        {direction.toUpperCase()}
+      </span>
+    </span>
+  )
 }
 
 export default function AIPrediction({ symbol }) {
@@ -36,12 +92,16 @@ export default function AIPrediction({ symbol }) {
   useEffect(() => { if (symbol) load() }, [symbol])
 
   const p = prediction
-  const DirectionIcon = p ? (DIRECTION_ICONS[p.direction] || Minus) : Minus
   const dirColor = p ? (DIRECTION_COLORS[p.direction] || 'text-terminal-dim') : 'text-terminal-dim'
   const confPct = p ? Math.round((p.confidence || 0) * 100) : 0
 
+  // Compute forecast price (midpoint of range)
+  const forecastPrice = p && p.price_low && p.price_high
+    ? ((p.price_low + p.price_high) / 2)
+    : null
+
   return (
-    <div className="terminal-card flex flex-col h-full">
+    <div className="terminal-card flex flex-col h-full animate-slideInRight">
       <div className="flex items-center justify-between px-4 py-2 border-b border-terminal-border">
         <div className="flex items-center gap-2">
           <Brain size={14} className="text-terminal-purple" />
@@ -52,36 +112,51 @@ export default function AIPrediction({ symbol }) {
           onClick={() => load(true)}
           disabled={loading}
           className="text-terminal-dim hover:text-terminal-text transition-colors"
+          title="Refresh forecast"
         >
           <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
         </button>
       </div>
 
-      <div className="flex-1 p-4 flex flex-col gap-3">
-        {error && <div className="text-terminal-red text-xs">{error}</div>}
-        {loading && !p && <div className="text-terminal-dim text-xs">Computing forecast...</div>}
+      <div className="flex-1 p-4 flex flex-col gap-3 overflow-y-auto">
+        {error && <div className="text-terminal-red text-xs bg-red-900/20 rounded p-2">{error}</div>}
+        {loading && !p && (
+          <div className="text-terminal-dim text-xs">
+            <LoadingDots />
+          </div>
+        )}
 
         {p && (
           <>
-            {/* Direction + Confidence */}
+            {/* Direction badge + confidence */}
             <div className="flex items-center justify-between">
-              <div className={`flex items-center gap-2 ${dirColor}`}>
-                <DirectionIcon size={18} />
-                <span className="text-lg font-semibold">{p.direction}</span>
+              <div className="flex items-center gap-2">
+                <DirectionBadge direction={p.direction} />
               </div>
               <div className="text-right">
                 <div className="text-xs text-terminal-dim">Confidence</div>
-                <div className="text-sm font-medium">{confPct}%</div>
+                <div className={`text-sm font-bold ${dirColor}`}>{confPct}%</div>
               </div>
             </div>
 
             {/* Confidence Bar */}
-            <div className="w-full bg-terminal-muted rounded-full h-1.5">
-              <div
-                className={`h-1.5 rounded-full transition-all ${p.direction === 'Bullish' ? 'bg-terminal-green' : p.direction === 'Bearish' ? 'bg-terminal-red' : 'bg-terminal-yellow'}`}
-                style={{ width: `${confPct}%` }}
-              />
-            </div>
+            <AnimatedConfidenceBar confPct={confPct} direction={p.direction} />
+
+            {/* Forecast Price Display */}
+            {forecastPrice && (
+              <div className="bg-terminal-bg rounded p-2.5 text-center">
+                <div className="terminal-label mb-1">7-Day Forecast Target</div>
+                <div className={`text-2xl font-bold ${dirColor}`}>
+                  ₹{forecastPrice.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                </div>
+                {p.current_price && (
+                  <div className="text-xs text-terminal-dim mt-0.5">
+                    {forecastPrice > p.current_price ? '▲' : '▼'}{' '}
+                    {Math.abs(((forecastPrice - p.current_price) / p.current_price) * 100).toFixed(2)}% from current
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Price Range */}
             <div className="bg-terminal-bg rounded p-2.5">
