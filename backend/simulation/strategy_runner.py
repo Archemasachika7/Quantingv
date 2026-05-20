@@ -4,8 +4,8 @@ Users write a `strategy(row, portfolio, history, symbol)` function.
 """
 import textwrap
 import traceback
-from .backtester import run_backtest
-from ..data.fetcher import fetch_historical
+from simulation.backtester import run_backtest
+from data.fetcher import fetch_historical
 
 BUILT_IN_STRATEGIES = {
     "sma_crossover": textwrap.dedent("""
