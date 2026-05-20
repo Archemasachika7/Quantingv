@@ -94,21 +94,31 @@ export default function App() {
   return (
     <div className="min-h-screen flex flex-col">
       {/* Top Bar */}
-      <header className="border-b border-terminal-border px-4 py-3 flex items-center justify-between bg-terminal-surface/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <Activity size={17} className="text-terminal-blue" style={{ filter: 'drop-shadow(0 0 5px rgba(59,130,246,0.5))' }} />
-            <span className="font-bold text-sm tracking-widest glow-text-blue">QUANTINGV</span>
+      <header className="border-b border-terminal-border bg-terminal-surface/80 backdrop-blur-sm sticky top-0 z-50">
+        {/* Brand + clock row */}
+        <div className="px-4 py-2 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <Activity size={17} className="text-terminal-blue" style={{ filter: 'drop-shadow(0 0 5px rgba(59,130,246,0.5))' }} />
+              <span className="font-bold text-sm tracking-widest glow-text-blue">QUANTINGV</span>
+            </div>
+            <span className="text-terminal-dim text-xs hidden sm:block">AI Quant Research Terminal</span>
           </div>
-          <span className="text-terminal-dim text-xs hidden sm:block">AI Quant Research Terminal</span>
+          <div className="flex items-center gap-2.5">
+            <MarketStatusBadge />
+            <LiveClock />
+            <span className="text-terminal-dim text-xs hidden md:block">
+              {new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
+            </span>
+          </div>
         </div>
-
-        <nav className="flex items-center gap-0.5">
+        {/* Tab navigation row */}
+        <nav className="flex items-center gap-0 px-2 border-t border-terminal-border/50 overflow-x-auto">
           {TABS.map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`relative px-4 py-1.5 rounded text-xs font-medium transition-all duration-200
+              className={`relative px-4 py-2 text-xs font-medium transition-all duration-200 whitespace-nowrap flex-shrink-0
                 ${tab === t
                   ? 'text-terminal-blue'
                   : 'text-terminal-dim hover:text-terminal-text'
@@ -124,14 +134,6 @@ export default function App() {
             </button>
           ))}
         </nav>
-
-        <div className="flex items-center gap-2.5">
-          <MarketStatusBadge />
-          <LiveClock />
-          <span className="text-terminal-dim text-xs hidden md:block">
-            {new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
-          </span>
-        </div>
       </header>
 
       {/* Animated gradient line */}
