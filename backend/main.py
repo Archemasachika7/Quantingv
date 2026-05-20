@@ -30,6 +30,9 @@ from sentiment.news_fetcher import fetch_news
 from sentiment.scorer import score_articles
 from simulation.strategy_runner import run_strategy, list_strategies
 from ai.gemini_advisor import explain_prediction, generate_weekly_outlook, critique_strategy
+from models.stress_test import run_stress_test
+from models.portfolio_optimizer import optimize_portfolio
+from ai.alert_engine import check_divergences
 
 
 # ── Lifespan ────────────────────────────────────────────────────────────────
@@ -256,6 +259,49 @@ async def websocket_quotes(ws: WebSocket):
             await asyncio.sleep(15)
     except WebSocketDisconnect:
         manager.disconnect(ws)
+
+
+# ── Stress Test ───────────────────────────────────────────────────────────────
+
+@app.get("/api/stress/{symbol}")
+async def stress_test(symbol: str, simulations: int = 500, horizon: int = 30):
+    """Monte Carlo + scenario stress test for a single asset."""
+    symbol = symbol.upper()
+    if symbol not in ALL_TICKERS:
+        raise HTTPException(404, f"Unknown symbol: {symbol}")
+    df = fetch_historical(symbol, months=24)
+    if df.empty or len(df) < 20:
+        raise HTTPException(400, f"Insufficient data for {symbol}")
+    result = run_stress_test(df, symbol, simulations=simulations, horizon=horizon)
+    if "error" in result and "symbol" not in result:
+        raise HTTPException(500, result["error"])
+    return result
+
+
+# ── Portfolio Optimizer ───────────────────────────────────────────────────────
+
+class PortfolioRequest(BaseModel):
+    symbols: list[str] = ["NIFTY50", "GOLD", "BTC", "RELIANCE", "TCS"]
+    months: int = 12
+
+
+@app.post("/api/portfolio/optimize")
+async def optimize_portfolio_endpoint(req: PortfolioRequest):
+    """Markowitz mean-variance portfolio optimization."""
+    symbols = [s.upper() for s in req.symbols]
+    result = optimize_portfolio(symbols, months=req.months)
+    if "error" in result and "symbols" not in result:
+        raise HTTPException(400, result["error"])
+    return result
+
+
+# ── Alerts ────────────────────────────────────────────────────────────────────
+
+@app.get("/api/alerts")
+async def get_alerts():
+    """Detect ML-forecast vs. sentiment divergences across prediction assets."""
+    alerts = check_divergences(PREDICTION_ASSETS)
+    return {"alerts": alerts, "count": len(alerts), "ts": datetime.utcnow().isoformat()}
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
