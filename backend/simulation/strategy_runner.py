@@ -2,6 +2,7 @@
 Safely execute user-provided strategy code in a sandboxed namespace.
 Users write a `strategy(row, portfolio, history, symbol)` function.
 """
+import builtins
 import textwrap
 import traceback
 from simulation.backtester import run_backtest
@@ -90,7 +91,7 @@ def run_strategy(
             return {"error": f"Unknown strategy: {strategy_name}"}
 
         # Compile in restricted namespace
-        namespace: dict = {"__builtins__": {b: __builtins__.__dict__[b] for b in ALLOWED_BUILTINS if b in __builtins__.__dict__}}  # type: ignore
+        namespace: dict = {"__builtins__": {b: getattr(builtins, b) for b in ALLOWED_BUILTINS if hasattr(builtins, b)}}
         try:
             exec(compile(code, "<strategy>", "exec"), namespace)
         except SyntaxError as e:
