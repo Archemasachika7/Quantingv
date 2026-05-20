@@ -304,6 +304,94 @@ async def get_alerts():
     return {"alerts": alerts, "count": len(alerts), "ts": datetime.utcnow().isoformat()}
 
 
+# ── Paper Trading ─────────────────────────────────────────────────────────────
+
+class PaperOrderRequest(BaseModel):
+    symbol: str
+    qty: float
+
+
+@app.get("/api/paper/portfolio")
+async def get_paper_portfolio_endpoint():
+    """Get current paper trading portfolio with live prices."""
+    from data.storage import get_paper_portfolio
+    from data.fetcher import fetch_live_quote
+    port = get_paper_portfolio()
+    enriched = {}
+    total_market_value = 0.0
+    for sym, pos in port["positions"].items():
+        quote = fetch_live_quote(sym)
+        live_price = quote.get("price", pos["avg_price"])
+        market_value = pos["qty"] * live_price
+        unrealised_pnl = pos["qty"] * (live_price - pos["avg_price"])
+        unrealised_pnl_pct = ((live_price / pos["avg_price"]) - 1) * 100 if pos["avg_price"] > 0 else 0
+        total_market_value += market_value
+        enriched[sym] = {
+            **pos,
+            "live_price": round(live_price, 2),
+            "market_value": round(market_value, 2),
+            "unrealised_pnl": round(unrealised_pnl, 2),
+            "unrealised_pnl_pct": round(unrealised_pnl_pct, 2),
+        }
+    total_value = port["cash"] + total_market_value
+    total_pnl = total_value - port["initial_balance"]
+    total_pnl_pct = (total_pnl / port["initial_balance"]) * 100
+    return {
+        **port,
+        "positions": enriched,
+        "total_market_value": round(total_market_value, 2),
+        "total_value": round(total_value, 2),
+        "total_pnl": round(total_pnl, 2),
+        "total_pnl_pct": round(total_pnl_pct, 2),
+    }
+
+
+@app.post("/api/paper/buy")
+async def paper_buy_endpoint(req: PaperOrderRequest):
+    from data.storage import paper_buy
+    from data.fetcher import fetch_live_quote
+    symbol = req.symbol.upper()
+    if symbol not in ALL_TICKERS:
+        raise HTTPException(404, f"Unknown symbol: {symbol}")
+    quote = fetch_live_quote(symbol)
+    price = quote.get("price", 0)
+    if price <= 0:
+        raise HTTPException(400, "Could not fetch live price")
+    result = paper_buy(symbol, req.qty, price)
+    if "error" in result:
+        raise HTTPException(400, result["error"])
+    return {**result, "executed_price": price, "symbol": symbol}
+
+
+@app.post("/api/paper/sell")
+async def paper_sell_endpoint(req: PaperOrderRequest):
+    from data.storage import paper_sell
+    from data.fetcher import fetch_live_quote
+    symbol = req.symbol.upper()
+    if symbol not in ALL_TICKERS:
+        raise HTTPException(404, f"Unknown symbol: {symbol}")
+    quote = fetch_live_quote(symbol)
+    price = quote.get("price", 0)
+    if price <= 0:
+        raise HTTPException(400, "Could not fetch live price")
+    result = paper_sell(symbol, req.qty, price)
+    if "error" in result:
+        raise HTTPException(400, result["error"])
+    return {**result, "executed_price": price, "symbol": symbol}
+
+
+@app.get("/api/paper/trades")
+async def get_paper_trades_endpoint():
+    from data.storage import get_paper_trades
+    return {"trades": get_paper_trades()}
+
+
+@app.post("/api/paper/reset")
+async def reset_paper_portfolio_endpoint():
+    from data.storage import reset_paper_portfolio
+    return reset_paper_portfolio()
+
+
 # ── Health ────────────────────────────────────────────────────────────────────
 
 @app.get("/health")
