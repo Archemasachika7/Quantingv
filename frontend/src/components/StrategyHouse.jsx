@@ -159,8 +159,16 @@ export default function StrategyHouse({ onMarkersUpdate }) {
 
         {/* Results */}
         {m && (
-          <div className="space-y-3">
-            <div className="terminal-label">Results — {result.symbol} / {strategy}</div>
+          <div className="space-y-3 animate-fadeInUp">
+            {/* Result banner */}
+            <div className={`rounded p-2.5 text-center border ${m.total_return_pct > 0
+              ? 'border-terminal-green/30 bg-terminal-green/5'
+              : 'border-terminal-red/30 bg-terminal-red/5'}`}>
+              <div className={`text-lg font-bold ${m.total_return_pct > 0 ? 'glow-text-green' : 'glow-text-red'}`}>
+                {m.total_return_pct > 0 ? '▲ PROFITABLE' : '▼ LOSING'}
+              </div>
+              <div className="text-xs text-terminal-dim mt-0.5">{result.symbol} · {strategy.replace(/_/g, ' ').toUpperCase()}</div>
+            </div>
 
             {/* Key metrics grid */}
             <div className="grid grid-cols-3 gap-2">
@@ -174,10 +182,14 @@ export default function StrategyHouse({ onMarkersUpdate }) {
                 { label: 'Profit Factor', value: m.profit_factor, color: m.profit_factor > 1.5 ? 'price-up' : 'text-terminal-yellow' },
                 { label: 'Final Equity', value: `₹${m.final_equity?.toLocaleString('en-IN')}`, color: 'text-terminal-text' },
                 { label: 'Sortino', value: m.sortino_ratio, color: m.sortino_ratio > 1 ? 'price-up' : 'text-terminal-dim' },
-              ].map(item => (
-                <div key={item.label} className="bg-terminal-bg rounded p-2">
+              ].map((item, i) => (
+                <div
+                  key={item.label}
+                  className="metric-card animate-fadeInUp"
+                  style={{ animationDelay: `${i * 0.05}s` }}
+                >
                   <div className="terminal-label">{item.label}</div>
-                  <div className={`text-sm font-medium ${item.color}`}>{item.value}</div>
+                  <div className={`text-sm font-bold ${item.color}`}>{item.value}</div>
                 </div>
               ))}
             </div>
@@ -193,7 +205,7 @@ export default function StrategyHouse({ onMarkersUpdate }) {
                 {critiqueLoading ? 'Analyzing...' : '✦ Get AI Critique'}
               </button>
               {critique && (
-                <div className="mt-2 bg-terminal-bg rounded p-2.5 text-xs text-terminal-dim leading-relaxed">
+                <div className="mt-2 glass-card p-2.5 text-xs text-terminal-dim leading-relaxed animate-fadeInUp">
                   {critique}
                 </div>
               )}

@@ -10,7 +10,7 @@ function getCurrencySymbol(symbol) {
   return '₹'
 }
 
-export default function MarketWatch({ onSelect, selected }) {
+export default function MarketWatch({ onSelect, selected, onQuotesUpdate }) {
   const [quotes, setQuotes] = useState([])
   const prevPrices = useRef({})
   const flashTimers = useRef({})
@@ -44,7 +44,8 @@ export default function MarketWatch({ onSelect, selected }) {
       })
       return newQuotes
     })
-  }, [triggerFlash])
+    onQuotesUpdate?.(newQuotes)
+  }, [triggerFlash, onQuotesUpdate])
 
   useWebSocket('/ws/quotes', (msg) => {
     if (msg.type === 'quotes') updateQuotes(msg.data)
