@@ -267,21 +267,30 @@ async def health():
 
 @app.get("/api/debug/{symbol}")
 async def debug_symbol(symbol: str):
-    """Quick test — returns Ticker.history() result for one symbol."""
-    from data.fetcher import _ticker_history
+    """Quick test — hits Yahoo Finance v8 chart API directly."""
+    from data.fetcher import _yahoo_chart, _HEADERS
+    import requests as req
     symbol = symbol.upper()
     meta = ALL_TICKERS.get(symbol)
     if not meta:
         return {"error": f"Unknown symbol {symbol}"}
+    ticker = meta["ticker"]
+    # Also expose raw HTTP status for diagnosis
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
     try:
-        df = _ticker_history(meta["ticker"], period="5d", interval="1d")
-        if df.empty:
-            return {"ticker": meta["ticker"], "rows": 0, "error": "empty dataframe"}
+        r = req.get(url, params={"range": "5d", "interval": "1d"}, headers=_HEADERS, timeout=15)
+        http_status = r.status_code
+        raw_keys = list(r.json().get("chart", {}).keys()) if r.ok else r.text[:200]
+    except Exception as e:
+        return {"ticker": ticker, "error": str(e)}
+    try:
+        df = _yahoo_chart(ticker, period="5d", interval="1d")
         return {
-            "ticker": meta["ticker"],
+            "ticker": ticker,
+            "http_status": http_status,
+            "raw_keys": raw_keys,
             "rows": len(df),
-            "columns": list(df.columns),
-            "last_close": float(df["close"].dropna().iloc[-1]) if "close" in df.columns else None,
+            "last_close": float(df["close"].dropna().iloc[-1]) if not df.empty else None,
         }
     except Exception as e:
-        return {"ticker": meta["ticker"], "error": str(e)}
+        return {"ticker": ticker, "http_status": http_status, "error": str(e)}
