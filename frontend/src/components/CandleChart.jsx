@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createChart, CrosshairMode } from 'lightweight-charts'
+import { API_BASE } from '../hooks/useApi'
 
 const PERIODS = ['1mo', '3mo', '6mo', '1y', '2y', '5y']
 
@@ -74,7 +75,7 @@ export default function CandleChart({ symbol, markers = [] }) {
   useEffect(() => {
     if (!candleRef.current) return
     setLoading(true)
-    fetch(`/api/chart/${symbol}?period=${period}`)
+    fetch(`${API_BASE}/api/chart/${symbol}?period=${period}`)
       .then(r => r.json())
       .then(d => {
         const candles = d.candles || []

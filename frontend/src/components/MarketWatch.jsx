@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
-import { useWebSocket } from '../hooks/useApi'
+import { useWebSocket, API_BASE } from '../hooks/useApi'
 
 export default function MarketWatch({ onSelect, selected }) {
   const [quotes, setQuotes] = useState([])
@@ -10,7 +10,7 @@ export default function MarketWatch({ onSelect, selected }) {
   })
 
   useEffect(() => {
-    fetch('/api/quotes').then(r => r.json()).then(d => setQuotes(d.quotes || []))
+    fetch(`${API_BASE}/api/quotes`).then(r => r.json()).then(d => setQuotes(d.quotes || []))
   }, [])
 
   return (
