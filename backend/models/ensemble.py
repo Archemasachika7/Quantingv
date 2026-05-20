@@ -1,6 +1,6 @@
 import pandas as pd
-from .arima_model import arima_forecast
-from .rf_model import rf_forecast
+from models.arima_model import arima_forecast
+from models.rf_model import rf_forecast
 
 
 WEIGHTS = {

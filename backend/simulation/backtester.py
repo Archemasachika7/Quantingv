@@ -14,7 +14,7 @@ Users write Python strategies as a function:
 import math
 import pandas as pd
 import numpy as np
-from .portfolio import Portfolio
+from simulation.portfolio import Portfolio
 
 
 def run_backtest(
