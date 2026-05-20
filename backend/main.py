@@ -267,19 +267,16 @@ async def health():
 
 @app.get("/api/debug/{symbol}")
 async def debug_symbol(symbol: str):
-    """Quick test — returns raw yfinance download result for one symbol."""
-    import yfinance as yf
-    from data.fetcher import _get_session, _flatten_cols
+    """Quick test — returns Ticker.history() result for one symbol."""
+    from data.fetcher import _ticker_history
     symbol = symbol.upper()
     meta = ALL_TICKERS.get(symbol)
     if not meta:
         return {"error": f"Unknown symbol {symbol}"}
     try:
-        df = yf.download(meta["ticker"], period="5d", interval="1d",
-                         auto_adjust=True, progress=False, session=_get_session())
+        df = _ticker_history(meta["ticker"], period="5d", interval="1d")
         if df.empty:
             return {"ticker": meta["ticker"], "rows": 0, "error": "empty dataframe"}
-        df = _flatten_cols(df)
         return {
             "ticker": meta["ticker"],
             "rows": len(df),

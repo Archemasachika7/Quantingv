@@ -10,7 +10,6 @@ _SESSION = None
 
 
 def _get_session() -> requests.Session:
-    """Reusable session with browser User-Agent to avoid Yahoo Finance bot blocks."""
     global _SESSION
     if _SESSION is None:
         _SESSION = requests.Session()
@@ -26,12 +25,22 @@ def _get_session() -> requests.Session:
     return _SESSION
 
 
-def _flatten_cols(df: pd.DataFrame) -> pd.DataFrame:
-    """Flatten MultiIndex columns yfinance >=0.2.x sometimes produces."""
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = [c[0].lower() for c in df.columns]
-    else:
-        df.columns = [c.lower() for c in df.columns]
+def _ticker_history(yf_ticker: str, period: str = "6mo", interval: str = "1d") -> pd.DataFrame:
+    """Use Ticker.history() — more reliable on cloud hosts than yf.download()."""
+    t = yf.Ticker(yf_ticker, session=_get_session())
+    df = t.history(period=period, interval=interval, auto_adjust=True, timeout=20)
+    if df.empty:
+        return df
+    df.columns = [c.lower() for c in df.columns]
+    return df
+
+
+def _ticker_history_range(yf_ticker: str, start: str) -> pd.DataFrame:
+    t = yf.Ticker(yf_ticker, session=_get_session())
+    df = t.history(start=start, interval="1d", auto_adjust=True, timeout=20)
+    if df.empty:
+        return df
+    df.columns = [c.lower() for c in df.columns]
     return df
 
 
@@ -42,14 +51,9 @@ def fetch_live_quote(symbol: str) -> dict:
     base = {"symbol": symbol, "label": meta["label"], "price": 0, "change": 0,
             "change_pct": 0, "currency": meta["currency"], "category": meta["category"]}
     try:
-        df = yf.download(
-            meta["ticker"], period="5d", interval="1d",
-            auto_adjust=True, progress=False,
-            session=_get_session(),
-        )
+        df = _ticker_history(meta["ticker"], period="5d", interval="1d")
         if df.empty:
             return base
-        df = _flatten_cols(df)
         closes = df["close"].dropna()
         if len(closes) < 1:
             return base
@@ -79,13 +83,9 @@ def fetch_historical(symbol: str, months: int = 60) -> pd.DataFrame:
     if not meta:
         raise ValueError(f"Unknown symbol: {symbol}")
     start = (datetime.now() - timedelta(days=months * 31)).strftime("%Y-%m-%d")
-    df = yf.download(
-        meta["ticker"], start=start, auto_adjust=True, progress=False,
-        session=_get_session(),
-    )
+    df = _ticker_history_range(meta["ticker"], start=start)
     if df.empty:
         return df
-    df = _flatten_cols(df)
     df = compute_indicators(df)
     return df
 
@@ -101,14 +101,9 @@ def fetch_ohlcv_for_chart(symbol: str, period: str = "6mo", interval: str = "1d"
     meta = ALL_TICKERS.get(symbol)
     if not meta:
         return []
-    df = yf.download(
-        meta["ticker"], period=period, interval=interval,
-        auto_adjust=True, progress=False,
-        session=_get_session(),
-    )
+    df = _ticker_history(meta["ticker"], period=period, interval=interval)
     if df.empty:
         return []
-    df = _flatten_cols(df)
     records = []
     for ts, row in df.iterrows():
         try:
