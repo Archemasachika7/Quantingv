@@ -92,7 +92,7 @@ create table if not exists public.predictions (
     forecast_price  numeric(18,4),
     model_name      text,
     ai_explanation  text,
-    unique(symbol, horizon_days, date_trunc('day', created_at))
+    unique(symbol, horizon_days)
 );
 create index if not exists idx_predictions_symbol on public.predictions(symbol, created_at desc);
 
