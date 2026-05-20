@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Newspaper, RefreshCw } from 'lucide-react'
+import { API_BASE } from '../hooks/useApi'
 
 export default function WeeklyOutlook() {
   const [outlook, setOutlook] = useState(null)
@@ -7,7 +8,7 @@ export default function WeeklyOutlook() {
 
   const load = () => {
     setLoading(true)
-    fetch('/api/weekly-outlook')
+    fetch(`${API_BASE}/api/weekly-outlook`)
       .then(r => r.json())
       .then(d => setOutlook(d))
       .finally(() => setLoading(false))

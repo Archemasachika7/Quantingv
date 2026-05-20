@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { TrendingUp, TrendingDown, Minus, RefreshCw, Brain } from 'lucide-react'
+import { API_BASE } from '../hooks/useApi'
 
 const DIRECTION_COLORS = {
   Bullish: 'text-terminal-green',
@@ -21,7 +22,7 @@ export default function AIPrediction({ symbol }) {
   const load = (fresh = false) => {
     setLoading(true)
     setError(null)
-    fetch(`/api/predict/${symbol}${fresh ? '?fresh=true' : ''}`)
+    fetch(`${API_BASE}/api/predict/${symbol}${fresh ? '?fresh=true' : ''}`)
       .then(r => r.json())
       .then(d => {
         if (d.error) throw new Error(d.error)

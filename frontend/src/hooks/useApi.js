@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 
 // In production (Vercel), set VITE_API_URL to your Railway backend URL.
 // In local dev, Vite proxies /api and /ws to localhost:8000.
-const API_BASE = import.meta.env.VITE_API_URL || ''
+export const API_BASE = import.meta.env.VITE_API_URL || ''
 
 export function useApi(path, options = {}) {
   const [data, setData] = useState(null)
