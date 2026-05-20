@@ -8,10 +8,11 @@ import WeeklyOutlook from './components/WeeklyOutlook'
 import StressTest from './components/StressTest'
 import PortfolioOptimizer from './components/PortfolioOptimizer'
 import AlertsPanel from './components/AlertsPanel'
+import PaperTrading from './components/PaperTrading'
 import { Activity } from 'lucide-react'
 import { API_BASE } from './hooks/useApi'
 
-const TABS = ['Dashboard', 'Strategy House', 'Weekly Outlook', 'Risk Lab', 'Portfolio', 'Alerts']
+const TABS = ['Dashboard', 'Strategy House', 'Weekly Outlook', 'Risk Lab', 'Portfolio', 'Alerts', 'Paper Trading']
 
 function getISTNow() {
   const now = new Date()
@@ -192,6 +193,12 @@ export default function App() {
         {tab === 'Alerts' && (
           <div className="max-w-3xl">
             <AlertsPanel />
+          </div>
+        )}
+
+        {tab === 'Paper Trading' && (
+          <div className="max-w-7xl">
+            <PaperTrading />
           </div>
         )}
       </main>

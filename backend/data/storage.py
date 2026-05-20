@@ -269,3 +269,128 @@ def get_trades(portfolio_id: str) -> list[dict]:
         with _sqlite_conn() as conn:
             rows = conn.execute("SELECT * FROM trades WHERE portfolio_id=? ORDER BY ts DESC", (portfolio_id,)).fetchall()
         return [dict(r) for r in rows]
+
+
+# ── Paper Trading (session-based, in-memory + SQLite) ─────────────────────────
+
+import time as _time
+
+_PAPER_STATE: dict = {
+    "cash": 100_000.0,
+    "positions": {},       # {symbol: {"qty": float, "avg_price": float, "label": str}}
+    "initial_balance": 100_000.0,
+}
+_PAPER_TRADES: list[dict] = []
+_PAPER_TRADE_COUNTER: list[int] = [0]  # mutable counter
+
+
+def get_paper_portfolio() -> dict:
+    """Return current paper portfolio state."""
+    positions = _PAPER_STATE["positions"]
+    market_value = sum(pos["qty"] * pos["avg_price"] for pos in positions.values())
+    cash = _PAPER_STATE["cash"]
+    initial = _PAPER_STATE["initial_balance"]
+    total_value = cash + market_value
+    pnl_total = total_value - initial
+    pnl_pct = (pnl_total / initial) * 100 if initial > 0 else 0.0
+    return {
+        "cash": round(cash, 2),
+        "initial_balance": round(initial, 2),
+        "positions": {sym: dict(pos) for sym, pos in positions.items()},
+        "total_value": round(total_value, 2),
+        "pnl_total": round(pnl_total, 2),
+        "pnl_pct": round(pnl_pct, 2),
+        "num_trades": len(_PAPER_TRADES),
+    }
+
+
+def paper_buy(symbol: str, qty: float, price: float) -> dict:
+    """Execute a paper buy. Returns updated portfolio."""
+    if qty <= 0:
+        return {"error": "Quantity must be greater than 0"}
+    cost = qty * price
+    if _PAPER_STATE["cash"] < cost:
+        return {"error": f"Insufficient cash. Need ₹{cost:,.2f}, have ₹{_PAPER_STATE['cash']:,.2f}"}
+
+    _PAPER_STATE["cash"] -= cost
+
+    positions = _PAPER_STATE["positions"]
+    if symbol in positions:
+        existing = positions[symbol]
+        total_qty = existing["qty"] + qty
+        avg_price = (existing["qty"] * existing["avg_price"] + qty * price) / total_qty
+        positions[symbol]["qty"] = total_qty
+        positions[symbol]["avg_price"] = round(avg_price, 4)
+    else:
+        positions[symbol] = {"qty": qty, "avg_price": round(price, 4), "label": symbol}
+
+    _PAPER_TRADE_COUNTER[0] += 1
+    trade = {
+        "id": _PAPER_TRADE_COUNTER[0],
+        "symbol": symbol,
+        "side": "BUY",
+        "qty": qty,
+        "price": round(price, 4),
+        "total": round(cost, 2),
+        "pnl": 0.0,
+        "ts": datetime.utcnow().isoformat(),
+        "label": symbol,
+    }
+    _PAPER_TRADES.insert(0, trade)
+
+    return get_paper_portfolio()
+
+
+def paper_sell(symbol: str, qty: float, price: float) -> dict:
+    """Execute a paper sell. Returns updated portfolio and trade PnL."""
+    if qty <= 0:
+        return {"error": "Quantity must be greater than 0"}
+
+    positions = _PAPER_STATE["positions"]
+    if symbol not in positions:
+        return {"error": f"No position in {symbol}"}
+
+    pos = positions[symbol]
+    if pos["qty"] < qty:
+        return {"error": f"Insufficient position. Have {pos['qty']}, trying to sell {qty}"}
+
+    avg_price = pos["avg_price"]
+    pnl = qty * (price - avg_price)
+    proceeds = qty * price
+
+    _PAPER_STATE["cash"] += proceeds
+    pos["qty"] = round(pos["qty"] - qty, 8)
+
+    if pos["qty"] <= 1e-8:
+        del positions[symbol]
+
+    _PAPER_TRADE_COUNTER[0] += 1
+    trade = {
+        "id": _PAPER_TRADE_COUNTER[0],
+        "symbol": symbol,
+        "side": "SELL",
+        "qty": qty,
+        "price": round(price, 4),
+        "total": round(proceeds, 2),
+        "pnl": round(pnl, 2),
+        "ts": datetime.utcnow().isoformat(),
+        "label": symbol,
+    }
+    _PAPER_TRADES.insert(0, trade)
+
+    return get_paper_portfolio()
+
+
+def get_paper_trades() -> list[dict]:
+    """Return all paper trades sorted by time desc."""
+    return list(_PAPER_TRADES)
+
+
+def reset_paper_portfolio() -> dict:
+    """Reset portfolio to initial state (₹1,00,000 cash)."""
+    _PAPER_STATE["cash"] = 100_000.0
+    _PAPER_STATE["positions"] = {}
+    _PAPER_STATE["initial_balance"] = 100_000.0
+    _PAPER_TRADES.clear()
+    _PAPER_TRADE_COUNTER[0] = 0
+    return get_paper_portfolio()
