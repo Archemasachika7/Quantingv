@@ -20,7 +20,7 @@ def get_usd_inr_rate() -> float:
     if _USD_INR_CACHE["rate"] and (now - _USD_INR_CACHE["ts"]) < _USD_INR_TTL:
         return float(_USD_INR_CACHE["rate"])
     try:
-        df = _yahoo_chart("INR=X", period="5d", interval="1d")
+        df = _yahoo_chart("USDINR=X", period="5d", interval="1d")
         if not df.empty:
             rate = float(df["close"].iloc[-1])
             _USD_INR_CACHE.update({"rate": rate, "ts": now})
@@ -213,24 +213,46 @@ def fetch_quote_any(ticker: str, label: str = "") -> dict:
         return base
 
 
+_ALLOWED_EXCHANGES = {
+    # Indian
+    "NSI", "NSE", "BSE", "BOM",
+    # US
+    "NasdaqGS", "NasdaqGM", "NasdaqCM", "Nasdaq", "NASDAQ",
+    "NYSE", "NYQ", "NYSEArca", "NYSEARCA",
+    # Crypto (cross-listed, always INR-converted)
+    "CCC", "CCY",
+}
+
+
 def search_yahoo(q: str) -> list[dict]:
-    """Search Yahoo Finance for matching symbols."""
+    """Search Yahoo Finance — filtered to Indian (NSE/BSE) and US (NASDAQ/NYSE) markets."""
     url = "https://query1.finance.yahoo.com/v1/finance/search"
-    params = {"q": q, "lang": "en-US", "region": "IN", "quotesCount": 10, "newsCount": 0}
+    params = {"q": q, "lang": "en-US", "region": "IN", "quotesCount": 20, "newsCount": 0}
     try:
         resp = _session().get(url, params=params, timeout=10)
         resp.raise_for_status()
         results = resp.json().get("quotes", [])
-        return [
-            {
-                "ticker": r["symbol"],
-                "label": r.get("shortname") or r.get("longname") or r["symbol"],
-                "exchange": r.get("exchDisp", ""),
-                "type": r.get("typeDisp", ""),
-            }
-            for r in results
-            if r.get("symbol")
-        ]
+        out = []
+        for r in results:
+            sym = r.get("symbol", "")
+            if not sym:
+                continue
+            exch = r.get("exchange", "")
+            exch_disp = r.get("exchDisp", "")
+            type_disp = r.get("typeDisp", "")
+            # Accept NSE/BSE by suffix or exchange code, US exchanges, crypto
+            is_india = sym.endswith(".NS") or sym.endswith(".BO") or exch in {"NSI", "BSE", "BOM"}
+            is_us = exch_disp in _ALLOWED_EXCHANGES or exch in {"NMS", "NGM", "NCM", "NYQ", "ASE"}
+            is_crypto = type_disp == "Cryptocurrency"
+            if not (is_india or is_us or is_crypto):
+                continue
+            out.append({
+                "ticker": sym,
+                "label": r.get("shortname") or r.get("longname") or sym,
+                "exchange": exch_disp or exch,
+                "type": type_disp,
+            })
+        return out[:10]
     except Exception:
         return []
 
@@ -245,6 +267,16 @@ def fetch_historical(symbol: str, months: int = 60) -> pd.DataFrame:
         raise ValueError(f"Unknown symbol: {symbol}")
     start = (datetime.now() - timedelta(days=months * 31)).strftime("%Y-%m-%d")
     df = _yahoo_chart_range(meta["ticker"], start=start)
+    if df.empty:
+        return df
+    df = compute_indicators(df)
+    return df
+
+
+def fetch_historical_any(ticker: str, months: int = 60) -> pd.DataFrame:
+    """Fetch and indicator-compute historical OHLCV for any Yahoo Finance ticker."""
+    start = (datetime.now() - timedelta(days=months * 31)).strftime("%Y-%m-%d")
+    df = _yahoo_chart_range(ticker, start=start)
     if df.empty:
         return df
     df = compute_indicators(df)
