@@ -1,18 +1,26 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { createChart, CrosshairMode } from 'lightweight-charts'
 import { API_BASE } from '../hooks/useApi'
 
+const TIMEFRAMES = [
+  { label: '5m',  interval: '5m',  period: '5d',  live: true  },
+  { label: '1H',  interval: '1h',  period: '1mo', live: true  },
+  { label: '3H',  interval: '3h',  period: '3mo', live: false },
+  { label: '1D',  interval: '1d',  period: null,  live: false },
+]
 const PERIODS = ['1mo', '3mo', '6mo', '1y', '2y', '5y']
+const LIVE_REFRESH_MS = 30_000
 
 export default function CandleChart({ symbol, markers = [] }) {
   const containerRef = useRef(null)
   const chartRef = useRef(null)
   const candleRef = useRef(null)
   const volumeRef = useRef(null)
-  const markerSeriesRef = useRef(null)
+  const [timeframe, setTimeframe] = useState(TIMEFRAMES[3])  // default 1D
   const [period, setPeriod] = useState('6mo')
   const [loading, setLoading] = useState(true)
   const [crosshair, setCrosshair] = useState(null)
+  const [lastUpdated, setLastUpdated] = useState(null)
 
   // Init chart once
   useEffect(() => {
@@ -28,7 +36,7 @@ export default function CandleChart({ symbol, markers = [] }) {
       },
       crosshair: { mode: CrosshairMode.Normal },
       rightPriceScale: { borderColor: '#1f2937' },
-      timeScale: { borderColor: '#1f2937', timeVisible: true },
+      timeScale: { borderColor: '#1f2937', timeVisible: true, secondsVisible: false },
       width: containerRef.current.clientWidth,
       height: 380,
     })
@@ -71,11 +79,12 @@ export default function CandleChart({ symbol, markers = [] }) {
     }
   }, [])
 
-  // Load data when symbol or period changes
-  useEffect(() => {
+  const activePeriod = timeframe.interval === '1d' ? period : timeframe.period
+
+  const loadData = useCallback(() => {
     if (!candleRef.current) return
-    setLoading(true)
-    fetch(`${API_BASE}/api/chart/${symbol}?period=${period}`)
+    const url = `${API_BASE}/api/chart/${symbol}?period=${activePeriod}&interval=${timeframe.interval}`
+    fetch(url)
       .then(r => r.json())
       .then(d => {
         const candles = d.candles || []
@@ -87,12 +96,26 @@ export default function CandleChart({ symbol, markers = [] }) {
             color: c.close >= c.open ? '#26a69a33' : '#ef535033',
           }))
         )
+        setLastUpdated(new Date())
         setLoading(false)
       })
       .catch(() => setLoading(false))
-  }, [symbol, period])
+  }, [symbol, timeframe, activePeriod])
 
-  // Apply trade markers
+  // Load data when symbol, timeframe, or period changes
+  useEffect(() => {
+    setLoading(true)
+    loadData()
+  }, [loadData])
+
+  // Auto-refresh for live intraday timeframes
+  useEffect(() => {
+    if (!timeframe.live) return
+    const id = setInterval(loadData, LIVE_REFRESH_MS)
+    return () => clearInterval(id)
+  }, [timeframe.live, loadData])
+
+  // Apply trade markers (only meaningful for daily)
   useEffect(() => {
     if (!candleRef.current || !markers.length) return
     candleRef.current.setMarkers(
@@ -119,17 +142,47 @@ export default function CandleChart({ symbol, markers = [] }) {
             </span>
           )}
         </div>
-        <div className="flex gap-1">
-          {PERIODS.map(p => (
-            <button
-              key={p}
-              onClick={() => setPeriod(p)}
-              className={`px-2 py-0.5 rounded text-xs transition-colors
-                ${period === p ? 'bg-terminal-blue text-white' : 'text-terminal-dim hover:text-terminal-text'}`}
-            >
-              {p}
-            </button>
-          ))}
+
+        <div className="flex items-center gap-3">
+          {/* Timeframe selector */}
+          <div className="flex gap-1 border-r border-terminal-border pr-3">
+            {TIMEFRAMES.map(tf => (
+              <button
+                key={tf.label}
+                onClick={() => setTimeframe(tf)}
+                className={`px-2 py-0.5 rounded text-xs transition-colors relative
+                  ${timeframe.label === tf.label ? 'bg-terminal-blue text-white' : 'text-terminal-dim hover:text-terminal-text'}`}
+              >
+                {tf.label}
+                {tf.live && timeframe.label === tf.label && (
+                  <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Period selector — only for 1D */}
+          {timeframe.interval === '1d' && (
+            <div className="flex gap-1">
+              {PERIODS.map(p => (
+                <button
+                  key={p}
+                  onClick={() => setPeriod(p)}
+                  className={`px-2 py-0.5 rounded text-xs transition-colors
+                    ${period === p ? 'bg-terminal-blue text-white' : 'text-terminal-dim hover:text-terminal-text'}`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Live refresh indicator for intraday */}
+          {timeframe.live && lastUpdated && (
+            <span className="text-terminal-dim text-xs">
+              {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </span>
+          )}
         </div>
       </div>
 

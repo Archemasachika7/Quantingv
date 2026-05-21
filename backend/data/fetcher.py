@@ -177,7 +177,15 @@ def fetch_ohlcv_for_chart(symbol: str, period: str = "6mo", interval: str = "1d"
     meta = ALL_TICKERS.get(symbol)
     if not meta:
         return []
-    df = _yahoo_chart(meta["ticker"], period=period, interval=interval)
+    # Yahoo Finance has no 3h interval — resample from 1h
+    if interval == "3h":
+        df = _yahoo_chart(meta["ticker"], period=period, interval="1h")
+        if not df.empty:
+            df = df.resample("3h").agg(
+                {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
+            ).dropna(subset=["close"])
+    else:
+        df = _yahoo_chart(meta["ticker"], period=period, interval=interval)
     if df.empty:
         return []
     records = []
