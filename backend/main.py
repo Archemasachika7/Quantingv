@@ -20,7 +20,10 @@ from pydantic import BaseModel
 load_dotenv()
 
 from data.assets import ALL_TICKERS, PREDICTION_ASSETS, WATCHLIST
-from data.fetcher import fetch_all_live_quotes, fetch_ohlcv_for_chart, fetch_historical
+from data.fetcher import (
+    fetch_all_live_quotes, fetch_ohlcv_for_chart, fetch_historical,
+    fetch_quote_any, fetch_ohlcv_any, search_yahoo,
+)
 from data.storage import (
     init_db, save_prediction, get_latest_prediction,
     save_sentiment, get_sentiment_avg,
@@ -117,6 +120,27 @@ async def get_chart_data(symbol: str, period: str = "6mo", interval: str = "1d")
 @app.get("/api/watchlist")
 async def get_watchlist():
     return WATCHLIST
+
+
+@app.get("/api/search")
+async def search_symbols(q: str):
+    """Search Yahoo Finance for matching tickers."""
+    if not q or len(q.strip()) < 1:
+        return {"results": []}
+    return {"results": search_yahoo(q.strip())}
+
+
+@app.get("/api/quote/any")
+async def get_quote_any(ticker: str, label: str = ""):
+    """Live quote for any Yahoo Finance ticker, in INR."""
+    return fetch_quote_any(ticker, label)
+
+
+@app.get("/api/chart/any")
+async def get_chart_any(ticker: str, period: str = "6mo", interval: str = "1d"):
+    """OHLCV candle data for any Yahoo Finance ticker, converted to INR."""
+    candles = fetch_ohlcv_any(ticker, period=period, interval=interval)
+    return {"ticker": ticker, "candles": candles, "count": len(candles)}
 
 
 # ── Prediction Endpoints ─────────────────────────────────────────────────────

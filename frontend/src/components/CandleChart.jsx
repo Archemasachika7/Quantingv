@@ -81,9 +81,14 @@ export default function CandleChart({ symbol, markers = [] }) {
 
   const activePeriod = timeframe.interval === '1d' ? period : timeframe.period
 
+  // Symbols containing '.' are raw Yahoo Finance tickers (e.g. TCS.NS) — use /chart/any
+  const isCustomTicker = symbol.includes('.')
+
   const loadData = useCallback(() => {
     if (!candleRef.current) return
-    const url = `${API_BASE}/api/chart/${symbol}?period=${activePeriod}&interval=${timeframe.interval}`
+    const url = isCustomTicker
+      ? `${API_BASE}/api/chart/any?ticker=${encodeURIComponent(symbol)}&period=${activePeriod}&interval=${timeframe.interval}`
+      : `${API_BASE}/api/chart/${symbol}?period=${activePeriod}&interval=${timeframe.interval}`
     fetch(url)
       .then(r => r.json())
       .then(d => {
@@ -100,7 +105,7 @@ export default function CandleChart({ symbol, markers = [] }) {
         setLoading(false)
       })
       .catch(() => setLoading(false))
-  }, [symbol, timeframe, activePeriod])
+  }, [symbol, isCustomTicker, timeframe, activePeriod])
 
   // Load data when symbol, timeframe, or period changes
   useEffect(() => {
