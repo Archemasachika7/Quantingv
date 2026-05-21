@@ -119,7 +119,15 @@ export default function AIPrediction({ symbol }) {
       </div>
 
       <div className="flex-1 p-4 flex flex-col gap-3 overflow-y-auto">
-        {error && <div className="text-terminal-red text-xs bg-red-900/20 rounded p-2">{error}</div>}
+        {error && (
+          <div className="text-xs rounded p-2 bg-red-900/20">
+            <span className="text-terminal-red">{
+              error.includes('Insufficient') || error.includes('Unknown')
+                ? 'AI forecast not available for this symbol — insufficient history or unsupported asset.'
+                : error
+            }</span>
+          </div>
+        )}
         {loading && !p && (
           <div className="text-terminal-dim text-xs">
             <LoadingDots />
