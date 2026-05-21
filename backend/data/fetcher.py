@@ -2,12 +2,37 @@
 Market data fetcher — calls Yahoo Finance v8 chart API directly via requests.
 This avoids yfinance's crumb/cookie mechanism which fails on cloud hosts.
 """
+import time
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
 from .assets import ALL_TICKERS
 from .storage import upsert_ohlcv
 from .indicators import compute_indicators
+
+# USD/INR exchange rate — cached for 5 minutes
+_USD_INR_CACHE: dict = {"rate": None, "ts": 0.0}
+_USD_INR_TTL = 300
+
+
+def get_usd_inr_rate() -> float:
+    now = time.time()
+    if _USD_INR_CACHE["rate"] and (now - _USD_INR_CACHE["ts"]) < _USD_INR_TTL:
+        return float(_USD_INR_CACHE["rate"])
+    try:
+        df = _yahoo_chart("INR=X", period="5d", interval="1d")
+        if not df.empty:
+            rate = float(df["close"].iloc[-1])
+            _USD_INR_CACHE.update({"rate": rate, "ts": now})
+            return rate
+    except Exception:
+        pass
+    return float(_USD_INR_CACHE["rate"] or 84.0)
+
+
+def _is_usd_ticker(ticker: str) -> bool:
+    """Heuristic: USD-denominated Yahoo Finance tickers."""
+    return ticker.endswith("-USD") or ticker.endswith("=F") or ticker.endswith("=X")
 
 _HEADERS = {
     "User-Agent": (
@@ -125,7 +150,7 @@ def fetch_live_quote(symbol: str) -> dict:
     if not meta:
         return {}
     base = {"symbol": symbol, "label": meta["label"], "price": 0, "change": 0,
-            "change_pct": 0, "currency": meta["currency"], "category": meta["category"]}
+            "change_pct": 0, "currency": "INR", "category": meta["category"]}
     try:
         df = _yahoo_chart(meta["ticker"], period="5d", interval="1d")
         if df.empty:
@@ -137,17 +162,77 @@ def fetch_live_quote(symbol: str) -> dict:
         prev_close = float(closes.iloc[-2]) if len(closes) > 1 else price
         change = price - prev_close
         change_pct = (change / prev_close * 100) if prev_close else 0
+        # Convert USD-denominated assets to INR
+        if meta["currency"] == "USD":
+            rate = get_usd_inr_rate()
+            price = price * rate
+            change = change * rate
         return {
             "symbol": symbol,
             "label": meta["label"],
             "price": round(price, 2),
             "change": round(change, 2),
             "change_pct": round(change_pct, 2),
-            "currency": meta["currency"],
+            "currency": "INR",
             "category": meta["category"],
         }
     except Exception:
         return base
+
+
+def fetch_quote_any(ticker: str, label: str = "") -> dict:
+    """Fetch a live quote for any Yahoo Finance ticker, converted to INR."""
+    display = label or ticker
+    base = {"symbol": ticker, "label": display, "price": 0, "change": 0,
+            "change_pct": 0, "currency": "INR", "category": "custom"}
+    try:
+        df = _yahoo_chart(ticker, period="5d", interval="1d")
+        if df.empty:
+            return base
+        closes = df["close"].dropna()
+        if len(closes) < 1:
+            return base
+        price = float(closes.iloc[-1])
+        prev = float(closes.iloc[-2]) if len(closes) > 1 else price
+        change = price - prev
+        change_pct = (change / prev * 100) if prev else 0
+        if _is_usd_ticker(ticker):
+            rate = get_usd_inr_rate()
+            price *= rate
+            change *= rate
+        return {
+            "symbol": ticker,
+            "label": display,
+            "price": round(price, 2),
+            "change": round(change, 2),
+            "change_pct": round(change_pct, 2),
+            "currency": "INR",
+            "category": "custom",
+        }
+    except Exception:
+        return base
+
+
+def search_yahoo(q: str) -> list[dict]:
+    """Search Yahoo Finance for matching symbols."""
+    url = "https://query1.finance.yahoo.com/v1/finance/search"
+    params = {"q": q, "lang": "en-US", "region": "IN", "quotesCount": 10, "newsCount": 0}
+    try:
+        resp = _session().get(url, params=params, timeout=10)
+        resp.raise_for_status()
+        results = resp.json().get("quotes", [])
+        return [
+            {
+                "ticker": r["symbol"],
+                "label": r.get("shortname") or r.get("longname") or r["symbol"],
+                "exchange": r.get("exchDisp", ""),
+                "type": r.get("typeDisp", ""),
+            }
+            for r in results
+            if r.get("symbol")
+        ]
+    except Exception:
+        return []
 
 
 def fetch_all_live_quotes() -> list[dict]:
@@ -173,21 +258,8 @@ def fetch_and_store_historical(symbol: str, months: int = 60):
     return df
 
 
-def fetch_ohlcv_for_chart(symbol: str, period: str = "6mo", interval: str = "1d") -> list[dict]:
-    meta = ALL_TICKERS.get(symbol)
-    if not meta:
-        return []
-    # Yahoo Finance has no 3h interval — resample from 1h
-    if interval == "3h":
-        df = _yahoo_chart(meta["ticker"], period=period, interval="1h")
-        if not df.empty:
-            df = df.resample("3h").agg(
-                {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
-            ).dropna(subset=["close"])
-    else:
-        df = _yahoo_chart(meta["ticker"], period=period, interval=interval)
-    if df.empty:
-        return []
+def _df_to_candles(df: pd.DataFrame, usd_to_inr: bool = False) -> list[dict]:
+    rate = get_usd_inr_rate() if usd_to_inr else 1.0
     records = []
     for ts, row in df.iterrows():
         try:
@@ -196,10 +268,39 @@ def fetch_ohlcv_for_chart(symbol: str, period: str = "6mo", interval: str = "1d"
             t = int(pd.Timestamp(ts).timestamp())
         records.append({
             "time": t,
-            "open": round(float(row["open"]), 4),
-            "high": round(float(row["high"]), 4),
-            "low": round(float(row["low"]), 4),
-            "close": round(float(row["close"]), 4),
+            "open": round(float(row["open"]) * rate, 2),
+            "high": round(float(row["high"]) * rate, 2),
+            "low": round(float(row["low"]) * rate, 2),
+            "close": round(float(row["close"]) * rate, 2),
             "volume": int(row.get("volume", 0) or 0),
         })
     return records
+
+
+def _fetch_df(ticker: str, period: str, interval: str) -> pd.DataFrame:
+    if interval == "3h":
+        df = _yahoo_chart(ticker, period=period, interval="1h")
+        if not df.empty:
+            df = df.resample("3h").agg(
+                {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
+            ).dropna(subset=["close"])
+        return df
+    return _yahoo_chart(ticker, period=period, interval=interval)
+
+
+def fetch_ohlcv_for_chart(symbol: str, period: str = "6mo", interval: str = "1d") -> list[dict]:
+    meta = ALL_TICKERS.get(symbol)
+    if not meta:
+        return []
+    df = _fetch_df(meta["ticker"], period=period, interval=interval)
+    if df.empty:
+        return []
+    return _df_to_candles(df, usd_to_inr=(meta["currency"] == "USD"))
+
+
+def fetch_ohlcv_any(ticker: str, period: str = "6mo", interval: str = "1d") -> list[dict]:
+    """Fetch OHLCV for any Yahoo Finance ticker, converted to INR if USD-denominated."""
+    df = _fetch_df(ticker, period=period, interval=interval)
+    if df.empty:
+        return []
+    return _df_to_candles(df, usd_to_inr=_is_usd_ticker(ticker))
