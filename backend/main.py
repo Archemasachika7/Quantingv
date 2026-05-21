@@ -20,7 +20,11 @@ from pydantic import BaseModel
 load_dotenv()
 
 from data.assets import ALL_TICKERS, PREDICTION_ASSETS, WATCHLIST
-from data.fetcher import fetch_all_live_quotes, fetch_ohlcv_for_chart, fetch_historical
+from data.fetcher import (
+    fetch_all_live_quotes, fetch_ohlcv_for_chart, fetch_historical,
+    fetch_historical_any, fetch_quote_any, fetch_ohlcv_any, search_yahoo,
+    get_usd_inr_rate, _is_usd_ticker,
+)
 from data.storage import (
     init_db, save_prediction, get_latest_prediction,
     save_sentiment, get_sentiment_avg,
@@ -119,46 +123,81 @@ async def get_watchlist():
     return WATCHLIST
 
 
+@app.get("/api/search")
+async def search_symbols(q: str):
+    """Search Yahoo Finance for matching tickers."""
+    if not q or len(q.strip()) < 1:
+        return {"results": []}
+    return {"results": search_yahoo(q.strip())}
+
+
+@app.get("/api/quote/any")
+async def get_quote_any(ticker: str, label: str = ""):
+    """Live quote for any Yahoo Finance ticker, in INR."""
+    return fetch_quote_any(ticker, label)
+
+
+@app.get("/api/chart/any")
+async def get_chart_any(ticker: str, period: str = "6mo", interval: str = "1d"):
+    """OHLCV candle data for any Yahoo Finance ticker, converted to INR."""
+    candles = fetch_ohlcv_any(ticker, period=period, interval=interval)
+    return {"ticker": ticker, "candles": candles, "count": len(candles)}
+
+
 # ── Prediction Endpoints ─────────────────────────────────────────────────────
 
 @app.get("/api/predict/{symbol}")
 async def get_prediction(symbol: str, horizon: int = 7, fresh: bool = False):
-    """Get ML prediction for a symbol. Uses cache unless fresh=true."""
-    symbol = symbol.upper()
-    if symbol not in ALL_TICKERS:
-        raise HTTPException(404, f"Unknown symbol: {symbol}")
+    """Get ML prediction for a symbol (known watchlist or custom YF ticker)."""
+    sym_key = symbol.upper()
+    is_known = sym_key in ALL_TICKERS
+    # For known symbols use the stored key; for custom tickers use as-is
+    cache_key = sym_key if is_known else symbol
 
     if not fresh:
-        cached = get_latest_prediction(symbol, horizon)
+        cached = get_latest_prediction(cache_key, horizon)
         if cached:
             return cached
 
-    df = fetch_historical(symbol, months=24)
-    if df.empty or len(df) < 60:
-        raise HTTPException(400, f"Insufficient data for {symbol}")
+    if is_known:
+        df = fetch_historical(sym_key, months=24)
+        is_usd = ALL_TICKERS[sym_key]["currency"] == "USD"
+    else:
+        df = fetch_historical_any(symbol, months=24)
+        is_usd = _is_usd_ticker(symbol)
 
-    prediction = ensemble_forecast(df, symbol, horizon=horizon)
+    if df.empty or len(df) < 60:
+        raise HTTPException(400, f"Insufficient historical data for {symbol} (need ≥60 candles)")
+
+    prediction = ensemble_forecast(df, cache_key, horizon=horizon)
+
+    # Convert USD-priced forecasts to INR
+    if is_usd:
+        rate = get_usd_inr_rate()
+        for k in ("price_low", "price_high", "forecast_price"):
+            if prediction.get(k):
+                prediction[k] = round(prediction[k] * rate, 2)
 
     # Augment with sentiment
-    articles = fetch_news(symbol, max_articles=15)
+    articles = fetch_news(cache_key, max_articles=15)
     sentiment = score_articles(articles)
-    save_sentiment(symbol, sentiment["avg_score"], sentiment["label"], "newsapi", "batch")
+    save_sentiment(cache_key, sentiment["avg_score"], sentiment["label"], "newsapi", "batch")
 
-    # Gemini explanation
-    explanation = explain_prediction(symbol, prediction, sentiment)
+    explanation = explain_prediction(cache_key, prediction, sentiment)
     prediction["ai_explanation"] = explanation
     prediction["sentiment"] = sentiment
 
-    save_prediction(
-        symbol=symbol,
-        horizon_days=horizon,
-        direction=prediction["direction"],
-        confidence=prediction["confidence"],
-        price_low=prediction["price_low"],
-        price_high=prediction["price_high"],
-        model_name=prediction["model_name"],
-        ai_explanation=explanation,
-    )
+    if is_known:
+        save_prediction(
+            symbol=sym_key,
+            horizon_days=horizon,
+            direction=prediction["direction"],
+            confidence=prediction["confidence"],
+            price_low=prediction["price_low"],
+            price_high=prediction["price_high"],
+            model_name=prediction["model_name"],
+            ai_explanation=explanation,
+        )
     return prediction
 
 
