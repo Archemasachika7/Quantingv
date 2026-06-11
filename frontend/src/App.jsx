@@ -9,6 +9,7 @@ import StressTest from './components/StressTest'
 import PortfolioOptimizer from './components/PortfolioOptimizer'
 import AlertsPanel from './components/AlertsPanel'
 import PaperTrading from './components/PaperTrading'
+import StickyBlurReveal from './components/StickyBlurReveal'
 import { Activity } from 'lucide-react'
 import { API_BASE } from './hooks/useApi'
 
@@ -147,9 +148,21 @@ export default function App() {
       <MarketStats quotes={quotes} />
 
       {/* Main Content */}
-      <main className="flex-1 p-3 overflow-auto animate-fadeIn">
+      <main className="flex-1 p-3 overflow-auto animate-fadeIn" data-scroll-container>
         {tab === 'Dashboard' && (
           <div className="flex flex-col gap-3">
+            {/* Sticky blur reveal hero */}
+            <StickyBlurReveal
+              text="AI-powered quantitative research terminal — predict smarter, trade better, risk less"
+              color="#93c5fd"
+              fontSize={28}
+              lineHeight={1.6}
+              fullRevealDistance={500}
+              initialBlur={5}
+              initialOpacity={0.05}
+              letterSpacing={0.3}
+            />
+
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2">
                 <CandleChart symbol={chartSymbol} markers={chartMarkers} />
